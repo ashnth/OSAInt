@@ -50,10 +50,6 @@ class Scraper:
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7; rv:89.0) Gecko/20100101 Firefox/89.0",
             ],
-            "webkit": [
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Safari/605.1.15",
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-            ],
         }
 
         # Randomly select a browser type
@@ -66,11 +62,21 @@ class Scraper:
         instance.playwright = await async_playwright().start()
         browser_launcher = getattr(instance.playwright, browser_type)
         instance.browser = await browser_launcher.launch(headless=False)
-        instance.context = await instance.browser.new_context(
-            proxy={"server": proxy} if proxy else None,
-            user_agent=user_agent,
-            java_script_enabled=True,
-        )
+
+        instance.context = None
+        # Create a new browser context with the selected user agent
+        # and proxy settings if provided
+        if proxy:
+            instance.context = await instance.browser.new_context(
+                proxy=proxy,
+                user_agent=user_agent,
+                java_script_enabled=True,
+            )
+        else:
+            instance.context = await instance.browser.new_context(
+                user_agent=user_agent,
+                java_script_enabled=True,
+            )
 
         # Give the context ninja-like stealth capabilities
         await stealth_async(instance.context)
@@ -89,7 +95,7 @@ class Scraper:
         page = await self.context.new_page()
         try:
             response = await page.goto(url, wait_until="networkidle")
-
+            await asyncio.sleep(4)
             # Check for rate limiting
             if response.status == 429:
                 await page.close()
@@ -99,11 +105,14 @@ class Scraper:
             if await page.locator("text=I'm not a robot").is_visible():
                 raise CaptchaDetected("Captcha detected on the page.")
 
-            # Check for captcha detection
-            content = await page.content()
-            if "captcha" in content.lower() or "verify" in content.lower():
+            if await page.locator("text=Access Denied").is_visible():
                 raise CaptchaDetected("Captcha detected on the page.")
 
+            if await page.locator("text=Verify you are human").is_visible():
+                raise CaptchaDetected("Captcha detected on the page.")
+
+            # Check for captcha detection
+            content = await page.content()
             return content
 
         except (RateLimited, CaptchaDetected):
@@ -130,7 +139,7 @@ class Scraper:
 
         try:
             response = await page.goto(url, wait_until="networkidle")
-
+            await asyncio.sleep(4)
             # Check for rate limiting
             if response.status == 429:
                 raise RateLimited("Rate limit exceeded. (HTTP 429)")
@@ -147,25 +156,10 @@ class Scraper:
                     random.uniform(0.5, 1.5)
                 )  # Random delay between scrolls
 
-            # Perform random mouse movements
-            viewport = await page.viewport_size()
-            if viewport:
-                for _ in range(
-                    random.randint(5, 10)
-                ):  # Random number of mouse movements
-                    x = random.randint(0, viewport["width"])
-                    y = random.randint(0, viewport["height"])
-                    await page.mouse.move(x, y, steps=random.randint(5, 15))
-                    await asyncio.sleep(
-                        random.uniform(0.2, 0.5)
-                    )  # Random delay between movements
-
             # Check for captcha detection
             content = await page.content()
-            if "captcha" in content.lower() or "verify" in content.lower():
-                raise CaptchaDetected("Captcha detected on the page.")
-
             return content
+
         except (RateLimited, CaptchaDetected):
             # Re-raise specific exceptions to be handled by the caller
             raise
