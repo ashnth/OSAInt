@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup
 from networkx.readwrite import json_graph
 
 from services.deepseek import ask_reasoner, generate_prompt_derive_connection
+from services.proxycurl import get_linkedin_profile
+from services.scrapedo import scrape_do
 from util.scraper import CaptchaDetected, RateLimited, Scraper
 
 # List of domains to skip (e.g., LinkedIn)
@@ -205,6 +207,26 @@ def plot_graph_with_plotly(graph, data_dir):
     fig.write_html(f"{data_dir}/final_graph.html")
 
 
+async def process_special_link(link):
+    if "linkedin.com/in/" in link:
+        try:
+            print(f"Processing LinkedIn profile with Proxycurl: {link}")
+            html_content = await get_linkedin_profile(link)
+            markdown_content = await purify_html(html_content)
+            return (link, markdown_content, None)
+        except Exception as e:
+            print(f"Failed to process LinkedIn profile {link}: {e}")
+            return (link, None, e)
+    else:
+        try:
+            print(f"Scraping (Scrape.do): {link}")
+            markdown_content = await scrape_do(link)
+            return (link, markdown_content, None)
+        except Exception as e:
+            print(f"Failed to scrape with Scrape.do: {link}: {e}")
+            return (link, None, e)
+
+
 async def main(target: str):
     # Create a directory for storing scraped data
     data_dir = f"data/{target.replace(' ', '_')}/{int(time.time())}"
@@ -216,7 +238,7 @@ async def main(target: str):
     # Things for doing concurrent scraping
     semaphore = asyncio.Semaphore(2)
     failed_links = []
-    skipped_links = []
+    special_links = []
     scraped_results = []
 
     total_pages = 3
@@ -233,11 +255,24 @@ async def main(target: str):
 
         for link, markdown_content, error in results:
             if error:
-                failed_links.append(link)
+                special_links.append(link)
             else:
                 scraped_results.append((link, markdown_content))
 
-        skipped_links.extend(links_to_skip)
+        special_links.extend(links_to_skip)
+
+    # Process skipped links with Scrape.do
+    if special_links:
+        print("Processing special links with scraping API...")
+        special_tasks = [
+            asyncio.create_task(process_special_link(link)) for link in special_links
+        ]
+        special_results = await asyncio.gather(*special_tasks)
+        for link, markdown_content, error in special_results:
+            if markdown_content:
+                scraped_results.append((link, markdown_content))
+            else:
+                failed_links.append(link)
 
     # Save all scraped data at once
     async with aiofiles.open(f"{data_dir}/scraped_data.md", "a") as f:
@@ -247,10 +282,6 @@ async def main(target: str):
     # Save failed links to a file
     async with aiofiles.open(f"{data_dir}/failed_links.txt", "w") as f:
         await f.write("\n".join(failed_links))
-
-    # Save skipped links to a file
-    async with aiofiles.open(f"{data_dir}/skipped_links.txt", "w") as f:
-        await f.write("\n".join(skipped_links))
 
     # Send the scraped data one by one to the LLM for analysis
     for link, markdown_content in scraped_results:
@@ -293,7 +324,6 @@ async def main(target: str):
     print("Scraping completed.")
     print(f"Scraped data saved to '{data_dir}/scraped_data.md'.")
     print(f"Failed links saved to '{data_dir}/failed_links.txt'.")
-    print(f"Skipped links saved to '{data_dir}/skipped_links.txt'.")
     print(f"Final graph saved to '{data_dir}/final_graph.json'.")
     print(f"Interactive graph saved to '{data_dir}/final_graph.html'.")
 

@@ -23,9 +23,17 @@ async def scrape_do(url: str):
     token = get_random_scrapedo_key()
 
     encoded_url = urllib.parse.quote(url)
+
+    # Normal Mode first
     url = "http://api.scrape.do/?token={}&url={}&output=markdown".format(
         token, encoded_url
     )
     response = requests.request("GET", url)
-    response.raise_for_status()  # Raise an error for bad responses
-    return response.text()
+
+    # If that doesn't work and you get 400, try with super
+    if response.status_code == 400:
+        url = "http://api.scrape.do/?token={}&url={}&super=true&output=markdown".format(
+            token, encoded_url
+        )
+        response = requests.request("GET", url)
+    return response.text
