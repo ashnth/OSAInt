@@ -139,6 +139,7 @@ class Scraper:
 
         try:
             response = await page.goto(url, wait_until="networkidle")
+            await page.wait_for_selector("body")
             await asyncio.sleep(4)
             # Check for rate limiting
             if response.status == 429:

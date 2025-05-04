@@ -12,6 +12,30 @@ deepseek_api_key = os.getenv("deepseek")
 client = OpenAI(api_key=deepseek_api_key, base_url="https://api.deepseek.com")
 
 
+def generate_prompt_advice(graph, hibp_results, sherlock_results, holehe_results):
+    prompt = (
+        "You are a digital security assistant."
+        "Below is a knowledge graph about a person, and breach/exposure data for their emails and usernames. "
+        "Your tasks:\n"
+        "1. Assess the exposure level and risk for this person based on the graph and breach data.\n"
+        "2. For each exposed account, email, or username, explain the risk and what information is public.\n"
+        "3. Provide a step-by-step guide for the person to mitigate these risks (e.g., change passwords, enable 2FA, remove old accounts, etc.).\n"
+        "4. If you find no significant exposure, explain why.\n"
+        "\n"
+        "Person's knowledge graph (JSON):"
+        f"\n```json\n{graph}\n```\n"
+        "HaveIBeenPwned results (JSON):"
+        f"\n```json\n{hibp_results}\n```\n"
+        "Sherlock results (JSON):"
+        f"\n```\n{sherlock_results}\n```\n"
+        "Holehe results (JSON):"
+        f"\n```\n{holehe_results}\n```\n"
+        "Please be concise, actionable, and specific."
+    )
+
+    return prompt
+
+
 def generate_prompt_derive_connection(name: str, data: str, current_graph=None) -> str:
     """
     Generate a prompt for the DeepSeek API to analyze data about a person,

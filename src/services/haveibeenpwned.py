@@ -10,7 +10,7 @@ async def check_breaches(account):
     """
     Check if an account has been breached using the Have I Been Pwned API.
     """
-    url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{account}?truncateResponse=false"
+    url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{account}"
     headers = {"hibp-api-key": os.getenv("haveibeenpwned")}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:

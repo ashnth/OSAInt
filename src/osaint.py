@@ -2,17 +2,22 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 import time
 from urllib.parse import urlparse
 
 import aiofiles
 import markdownify as md
 import networkx as nx
-import plotly.graph_objects as go
 from bs4 import BeautifulSoup
 from networkx.readwrite import json_graph
 
-from services.deepseek import ask_reasoner, generate_prompt_derive_connection
+from services.deepseek import (
+    ask_reasoner,
+    generate_prompt_advice,
+    generate_prompt_derive_connection,
+)
+from services.haveibeenpwned import check_breaches
 from services.proxycurl import get_linkedin_profile
 from services.scrapedo import scrape_do
 from util.scraper import CaptchaDetected, RateLimited, Scraper
@@ -227,6 +232,54 @@ async def process_special_link(link):
             return (link, None, e)
 
 
+async def check_sherlock(username):
+    try:
+        result = subprocess.run(
+            ["sherlock", username, "--print-found", "--no-color"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        found_accounts = []
+        for line in result.stdout.splitlines():
+            # Look for lines like: [+] Site: URL
+            match = re.match(r"\[\+\]\s+(.+?):\s+(.+)", line)
+            if match:
+                site, url = match.groups()
+                found_accounts.append({"site": site.strip(), "url": url.strip()})
+        return found_accounts
+    except Exception as e:
+        return f"Error: {e}"
+
+
+async def check_holehe(email):
+    try:
+        # Run holehe as a subprocess and capture output
+        result = subprocess.run(
+            ["holehe", email, "--no-color", "--only-used"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        used_sites = []
+        for line in result.stdout.splitlines():
+            # Look for lines that has [+] Domain
+            match = re.match(r"\[\+\]\s+(.+)", line)
+            if match:
+                site = match.group(1).strip()
+                used_sites.append(site)
+        return used_sites
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def get_person_subgraph(graph, person_id):
+    # Get all nodes reachable from the person
+    nodes = set(nx.descendants(graph, person_id)) | {person_id}
+    subgraph = graph.subgraph(nodes)
+    return json_graph.node_link_data(subgraph, edges="edges")
+
+
 async def main(target: str):
     # Create a directory for storing scraped data
     data_dir = f"data/{target.replace(' ', '_')}/{int(time.time())}"
@@ -283,6 +336,9 @@ async def main(target: str):
     async with aiofiles.open(f"{data_dir}/failed_links.txt", "w") as f:
         await f.write("\n".join(failed_links))
 
+    # # Sort scraped_results by length of markdown_content (descending)
+    # scraped_results.sort(key=lambda x: len(x[1]), reverse=True)
+
     # Send the scraped data one by one to the LLM for analysis
     for link, markdown_content in scraped_results:
         # Generate a prompt for the reasoner
@@ -326,6 +382,84 @@ async def main(target: str):
     print(f"Failed links saved to '{data_dir}/failed_links.txt'.")
     print(f"Final graph saved to '{data_dir}/final_graph.json'.")
     print(f"Interactive graph saved to '{data_dir}/final_graph.html'.")
+
+    # Ask which person the user is looking for if there are many
+    person_nodes = [
+        (node_id, data)
+        for node_id, data in graph.nodes(data=True)
+        if data.get("type") == "person" and target in data.get("label")
+    ]
+
+    for idx, (node_id, data) in enumerate(person_nodes):
+        summary = data.get("_comment", "No summary available.")
+        print(f"[{idx}] {node_id}: {summary}")
+
+    while True:
+        try:
+            choice = int(input("Select the correct entity by number: "))
+            if 0 <= choice < len(person_nodes):
+                break
+            else:
+                print(f"Please enter a number between 0 and {len(person_nodes)-1}.")
+        except ValueError:
+            print("Please enter a valid number.")
+
+    selected_node_id = person_nodes[choice][0]
+
+    associated = {"email": set(), "username": set(), "phone": set()}
+
+    for neighbor in graph.neighbors(selected_node_id):
+        node_data = graph.nodes[neighbor]
+        node_type = node_data.get("type")
+        # Direct association
+        if node_type in associated:
+            associated[node_type].add(node_data.get("label"))
+        # Indirect via social_media
+        if node_type == "social_media":
+            for sm_neighbor in graph.neighbors(neighbor):
+                sm_data = graph.nodes[sm_neighbor]
+                sm_type = sm_data.get("type")
+                if sm_type in ("email", "username"):
+                    associated[sm_type].add(sm_data.get("label"))
+
+    # Convert sets to lists for further use
+    for k in associated:
+        associated[k] = list(associated[k])
+
+    print("\nAssociated information for the selected person:")
+    for k, v in associated.items():
+        print(f"{k.title()}s: {', '.join(v) if v else 'None'}")
+
+    # For each email, check breaches
+    hibp_results = {}
+    for email in associated["email"]:
+        try:
+            breaches = await check_breaches(email)
+            hibp_results[email] = breaches
+            await asyncio.sleep(6)  # Avoiding Rate limit
+        except Exception as e:
+            hibp_results[email] = f"Error: {e}"
+
+    sherlock_results = {}
+    for username in associated["username"]:
+        sherlock_results[username] = await check_sherlock(username)
+
+    holehe_results = {}
+    for email in associated["email"]:
+        holehe_results[email] = await check_holehe(email)
+
+    person_subgraph = get_person_subgraph(graph, selected_node_id)
+
+    # Generate a prompt for the reasoner to get advice
+    advice_prompt = generate_prompt_advice(
+        json.dumps(person_subgraph, indent=2),
+        json.dumps(hibp_results, indent=2),
+        json.dumps(sherlock_results, indent=2),
+        json.dumps(holehe_results, indent=2),
+    )
+    advice_response = ask_reasoner(advice_prompt)
+
+    print("\nSecurity Guidance:\n", advice_response.get("data", response))
 
 
 if __name__ == "__main__":
