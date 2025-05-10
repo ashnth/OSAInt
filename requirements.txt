@@ -10,3 +10,4 @@ playwright-stealth
 plotly
 python-dotenv
 requests
+markdown

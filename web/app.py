@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 
+import markdown
 from flask import Flask, render_template, request
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
@@ -46,9 +47,11 @@ def results():
         json.dumps(holehe_results, indent=2),
     )
     advice_response = ask_reasoner(advice_prompt)
-    return render_template(
-        "results.html", guidance=advice_response.get("data", advice_response)
+    html_guidance = markdown.markdown(
+        advice_response.get("data", advice_response),
+        extensions=["fenced_code", "tables"],
     )
+    return render_template("results.html", guidance=html_guidance)
 
 
 if __name__ == "__main__":
