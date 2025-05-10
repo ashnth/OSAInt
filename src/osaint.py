@@ -280,6 +280,111 @@ def get_person_subgraph(graph, person_id):
     return json_graph.node_link_data(subgraph, edges="edges")
 
 
+async def run_pipeline(target: str):
+    # --- Everything up to and including graph building ---
+    data_dir = f"data/{target.replace(' ', '_')}/{int(time.time())}"
+    os.makedirs(data_dir, exist_ok=True)
+    graph = nx.DiGraph()
+    scraper = await Scraper.create()
+    semaphore = asyncio.Semaphore(2)
+    failed_links = []
+    special_links = []
+    scraped_results = []
+
+    total_pages = 3
+    for page in range(total_pages):
+        links = await scrape_google_page(scraper, target, page)
+        links_to_skip, links_to_process = categorize_links(links)
+        tasks = [
+            asyncio.create_task(process_link(scraper, link, semaphore))
+            for link in links_to_process
+        ]
+        results = await asyncio.gather(*tasks)
+        for link, markdown_content, error in results:
+            if error:
+                special_links.append(link)
+            else:
+                scraped_results.append((link, markdown_content))
+        special_links.extend(links_to_skip)
+
+    if special_links:
+        special_tasks = [
+            asyncio.create_task(process_special_link(link)) for link in special_links
+        ]
+        special_results = await asyncio.gather(*special_tasks)
+        for link, markdown_content, error in special_results:
+            if markdown_content:
+                scraped_results.append((link, markdown_content))
+            else:
+                failed_links.append(link)
+
+    for link, markdown_content in scraped_results:
+        prompt = generate_prompt_derive_connection(target, markdown_content, graph)
+        response = ask_reasoner(prompt)
+        if response["status"] == "success":
+            data = response["data"]
+            try:
+                match = re.search(r"\{[\s\S]*\}", data)
+                if match:
+                    new_data = json.loads(match.group(0))
+                else:
+                    new_data = json.loads(data)
+                for node in new_data.get("nodes", []):
+                    graph.add_node(node["id"], **node)
+                for edge in new_data.get("edges", []):
+                    graph.add_edge(edge["source"], edge["target"], **edge)
+            except Exception as e:
+                print(f"Failed to parse/update graph for {link}: {e}")
+
+    await scraper.close()
+
+    # --- Person selection step ---
+    person_nodes = [
+        (node_id, data)
+        for node_id, data in graph.nodes(data=True)
+        if data.get("type") == "person" and target in data.get("label")
+    ]
+
+    # Return all needed data for the frontend
+    return person_nodes, graph
+
+
+async def get_person_details(graph, selected_node_id):
+    associated = {"email": set(), "username": set(), "phone": set()}
+    for neighbor in graph.neighbors(selected_node_id):
+        node_data = graph.nodes[neighbor]
+        node_type = node_data.get("type")
+        if node_type in associated:
+            associated[node_type].add(node_data.get("label"))
+        if node_type == "social_media":
+            for sm_neighbor in graph.neighbors(neighbor):
+                sm_data = graph.nodes[sm_neighbor]
+                sm_type = sm_data.get("type")
+                if sm_type in ("email", "username"):
+                    associated[sm_type].add(sm_data.get("label"))
+    for k in associated:
+        associated[k] = list(associated[k])
+
+    hibp_results = {}
+    for email in associated["email"]:
+        try:
+            breaches = await check_breaches(email)
+            hibp_results[email] = breaches
+            await asyncio.sleep(6)
+        except Exception as e:
+            hibp_results[email] = f"Error: {e}"
+
+    sherlock_results = {}
+    for username in associated["username"]:
+        sherlock_results[username] = await check_sherlock(username)
+
+    holehe_results = {}
+    for email in associated["email"]:
+        holehe_results[email] = await check_holehe(email)
+
+    return associated, hibp_results, sherlock_results, holehe_results
+
+
 async def main(target: str):
     # Create a directory for storing scraped data
     data_dir = f"data/{target.replace(' ', '_')}/{int(time.time())}"

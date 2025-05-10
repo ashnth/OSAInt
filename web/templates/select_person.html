@@ -2,9 +2,9 @@
 <html>
   <body>
     <h2>Select the correct person</h2>
-    <form method="post">
-      {% for idx, node in enumerate(person_nodes) %}
-        <input type="radio" name="choice" value="{{ idx }}" required>
+    <form method="post" action="/results">
+      {% for node in person_nodes %}
+        <input type="radio" name="choice" value="{{ loop.index0 }}" required>
         {{ node[1].get('_comment', 'No summary available.') }}<br>
       {% endfor %}
       <button type="submit">Continue</button>

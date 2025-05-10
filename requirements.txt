@@ -1,0 +1,12 @@
+Flask
+aiofiles
+beautifulsoup4
+lxml
+markdownify
+networkx
+openai
+playwright
+playwright-stealth
+plotly
+python-dotenv
+requests
