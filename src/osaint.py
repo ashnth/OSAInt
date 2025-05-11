@@ -19,7 +19,7 @@ from services.deepseek import (
 )
 from services.haveibeenpwned import check_breaches
 from services.proxycurl import get_linkedin_profile
-from services.scrapedo import scrape_do
+from services.scrapedo import scrape_do, scrape_do_no_md
 from util.scraper import CaptchaDetected, RateLimited, Scraper
 
 # List of domains to skip (e.g., LinkedIn)
@@ -48,10 +48,11 @@ async def purify_html(html_content) -> str:
 async def scrape_google_page(scraper, target, page) -> list:
     """
     Scrape a single Google search results page and process the links.
+    If rate limited, fallback to scrape_do_no_md.
     :param scraper: Scraper instance
     :param target: Search target
     :param page: Page number to scrape
-    :return: List of skipped links
+    :return: List of links
     """
     start = (page * 10) + 1
     google_query = target.replace(" ", "+")
@@ -71,10 +72,19 @@ async def scrape_google_page(scraper, target, page) -> list:
 
         return links
 
-    except RateLimited:
-        print("Rate limit exceeded. Skipping this page.")
-    except CaptchaDetected:
-        print("Captcha detected. Skipping this page.")
+    except RateLimited or CaptchaDetected:
+        print("Rate limit exceeded. Retrying with scrape.do (HTML) for this page.")
+        try:
+            html_content = await scrape_do_no_md(url)
+            soup = BeautifulSoup(html_content, "lxml")
+            links = [
+                result.select_one("a")["href"]
+                for result in soup.select(".tF2Cxc")
+                if result.select_one("a") and "href" in result.select_one("a").attrs
+            ]
+            return links
+        except Exception as e:
+            print(f"scrape.do also failed for Google page {page + 1}: {e}")
     except Exception as e:
         print(f"Error scraping Google page {page + 1}: {e}")
 
@@ -320,9 +330,12 @@ async def run_pipeline(target: str):
 
     for link, markdown_content in scraped_results:
         prompt = generate_prompt_derive_connection(target, markdown_content, graph)
+        # Ask the reasoner for connections
+        print(f"Sending data to reasoner for {link}...")  # DEBUG
         response = ask_reasoner(prompt)
         if response["status"] == "success":
             data = response["data"]
+            print(f"Received response for {link}: {response['data']}")  # DEBUG
             try:
                 match = re.search(r"\{[\s\S]*\}", data)
                 if match:
