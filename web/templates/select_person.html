@@ -13,17 +13,17 @@
           <div style="color: red; margin-top: 12px;">{{ error }}</div>
         {% endif %}
         {% for node in person_nodes %}
-          <div style="text-align:left; margin-bottom:10px;">
+          <label class="person-option">
             <input type="radio" name="choice" value="{{ loop.index0 }}" required>
-            {{ node[1].get('_comment', 'No summary available.') }}
-          </div>
+            <span class="person-desc">{{ node[1].get('_comment', 'No summary available.') }}</span>
+          </label>
         {% endfor %}
         <button type="submit">Continue</button>
       </form>
       <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(255,255,255,0.8); z-index:9999; text-align:center;">
         <div class="centered-container" style="margin-top:20vh;">
           <div class="loader"></div>
-          <h3>Processing... Please wait.</h3>
+          <h3>Processing... Please allow up to 10 minutes for the program to complete</h3>
         </div>
       </div>
     </div>
