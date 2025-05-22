@@ -291,7 +291,6 @@ def get_person_subgraph(graph, person_id):
 
 
 async def run_pipeline(target: str):
-    # --- Everything up to and including graph building ---
     data_dir = f"data/{target.replace(' ', '_')}/{int(time.time())}"
     os.makedirs(data_dir, exist_ok=True)
     graph = nx.DiGraph()
@@ -348,6 +347,15 @@ async def run_pipeline(target: str):
                     graph.add_edge(edge["source"], edge["target"], **edge)
             except Exception as e:
                 print(f"Failed to parse/update graph for {link}: {e}")
+
+    # Save the graph for the demo
+    async with aiofiles.open(f"{data_dir}/final_graph.json", "w") as f:
+        await f.write(
+            json.dumps(json_graph.node_link_data(graph, edges="edges"), indent=2)
+        )
+
+    # Create an interactive graph using Plotly for the demo
+    plot_graph_with_plotly(graph, data_dir)
 
     await scraper.close()
 

@@ -11,3 +11,5 @@ plotly
 python-dotenv
 requests
 markdown
+sherlock-project
+holehe
