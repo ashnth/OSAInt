@@ -203,8 +203,4 @@ def ask_reasoner(prompt: str) -> dict:
 
 
 if __name__ == "__main__":
-    # Example usage
-    name = "John Doe"
-    data = "John Doe is a software engineer at Google."
-    result = generate_prompt_derive_connection(name, data)
-    print(result)
+    print(generate_prompt_advice("", "", "", ""))
