@@ -1,7 +1,5 @@
 # OSAINT
 
-Please do not share my API Keys `:)`
-
 ## How to start the program
 
 Run `./src/osaint.py` for CLI version or `./web/app.py` for web version (Web url will be displayed in the CLI for web version).
