@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Security Guidance - OSAInt</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- For markdown rendering -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css">
+  </head>
+  <body>
+    <div class="centered-container">
+      <h2>Security Guidance</h2>
+      <div class="markdown-body">{{ guidance|safe }}</div>
+    </div>
+  </body>
+</html>

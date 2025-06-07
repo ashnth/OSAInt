@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>OSAInt Security Assessment</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="centered-container">
+      <h2>OSAInt Security Assessment</h2>
+      <form method="post" onsubmit="showLoading()">
+        <label>Who is your target?</label><br>
+        <input type="text" name="target" required>
+        <br>
+        <button type="submit">Start</button>
+      </form>
+      <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(255,255,255,0.8); z-index:9999; text-align:center;">
+        <div class="centered-container" style="margin-top:20vh;">
+          <div class="loader"></div>
+          <h3>Processing... This may take some time. Please allow upto 30 minutes.</h3>
+        </div>
+      </div>
+      {% if error %}
+        <div style="color: red; margin-top: 12px;">{{ error }}</div>
+      {% endif %}
+    </div>
+    <script>
+      function showLoading() {
+        document.getElementById('loading-overlay').style.display = 'block';
+      }
+    </script>
+  </body>
+</html>

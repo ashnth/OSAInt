@@ -1,0 +1,24 @@
+[project]
+name = "osaint"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiofiles>=24.1.0",
+    "beautifulsoup4>=4.13.4",
+    "flask>=3.1.1",
+    "holehe>=1.61",
+    "lxml>=5.4.0",
+    "markdown>=3.8",
+    "markdownify>=1.1.0",
+    "networkx>=3.4.2",
+    "openai>=1.82.0",
+    "playwright>=1.52.0",
+    "playwright-stealth>=1.0.6",
+    "plotly>=6.1.1",
+    "python-dotenv>=1.1.0",
+    "requests>=2.32.3",
+    "setuptools>=80.8.0",
+    "sherlock-project>=0.15.0",
+]
